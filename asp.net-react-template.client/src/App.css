@@ -9,3 +9,7 @@ th, td {
     padding-left: 1rem;
     padding-right: 1rem;
 }
+
+table {
+    margin: 0 auto;
+}
