@@ -8,8 +8,8 @@ interface RaceResult {
 }
 
 function App() {
-    const [results, setResults] = useState<RaceResult[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [results, setResults] = useState<RaceResult[]>([]); // results updated via function setResults
+    const [loading, setLoading] = useState(true); // loading updated via function setLoading
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -23,10 +23,12 @@ function App() {
 
                 const data: RaceResult[] = await response.json();
                 setResults(data);
+                // update data continuously
             } catch {
                 setError('Could not load race results.');
             } finally {
                 setLoading(false);
+                // confirm successful data loaded
             }
         }
 
