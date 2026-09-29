@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './App.css';
+import { bestSector, sectorStatus, sectorLabels } from './sectorTiming';
 
 interface Driver {
     driver_number: number;
@@ -100,7 +101,7 @@ function DriverLapTable({ driverNumber }: { driverNumber: number }) {
 
         async function loadLaps() {
             try {
-                const response = await fetch(`/api/laps?driverNumber=${driverNumber}`, {
+                const response = await fetch('/api/laps', {
                     signal: controller.signal
                 });
                 if (!response.ok) throw new Error(`Request failed: ${response.status}`);
@@ -124,10 +125,21 @@ function DriverLapTable({ driverNumber }: { driverNumber: number }) {
 
     if (loading) return <p role="status">Loading laps...</p>;
     if (error) return <p role="alert">{error}</p>;
-    if (laps.length === 0) return <p>No lap data available for this driver.</p>;
+    const driverLaps = laps.filter(lap => lap.driver_number === driverNumber);
+    if (driverLaps.length === 0) return <p>No lap data available for this driver.</p>;
+
+    const sectorFields = ['duration_sector_1', 'duration_sector_2', 'duration_sector_3'] as const;
+    const personalBests = sectorFields.map(field => bestSector(driverLaps.map(lap => lap[field])));
+    const overallBests = sectorFields.map(field => bestSector(laps.map(lap => lap[field])));
 
     return (
         <div style={{ overflowX: 'auto' }}>
+            <ul className="sector-legend" aria-label="Sector colour legend">
+                <li><span className="sector-badge sector-purple">Purple</span> Fastest across all drivers</li>
+                <li><span className="sector-badge sector-green">Green</span> Driver’s best</li>
+                <li><span className="sector-badge sector-yellow">Yellow</span> Slower than driver’s best</li>
+            </ul>
+            <p className="sector-note">Compared within each sector across the saved race data, not live timing. Ties share a colour; missing times stay neutral.</p>
             <table>
                 <caption>Lap and sector times (minutes:seconds:milliseconds). N/A means unavailable.</caption>
                 <thead>
@@ -141,13 +153,24 @@ function DriverLapTable({ driverNumber }: { driverNumber: number }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {laps.map(lap => (
+                    {driverLaps.map(lap => (
                         <tr key={`${lap.session_key}-${lap.driver_number}-${lap.lap_number}`}>
                             <td>{lap.lap_number}</td>
                             <td>{formatLapTime(lap.lap_duration)}</td>
-                            <td>{formatLapTime(lap.duration_sector_1)}</td>
-                            <td>{formatLapTime(lap.duration_sector_2)}</td>
-                            <td>{formatLapTime(lap.duration_sector_3)}</td>
+                            {sectorFields.map((field, index) => {
+                                const status = sectorStatus(lap[field], personalBests[index], overallBests[index]);
+                                return (
+                                    <td key={field}>
+                                        <span
+                                            className={`sector-badge sector-${status}`}
+                                            title={sectorLabels[status]}
+                                            aria-label={`Sector ${index + 1}: ${formatLapTime(lap[field])}. ${sectorLabels[status]}`}
+                                        >
+                                            {formatLapTime(lap[field])}
+                                        </span>
+                                    </td>
+                                );
+                            })}
                             <td>{lap.is_pit_out_lap ? 'Yes' : '—'}</td>
                         </tr>
                     ))}
