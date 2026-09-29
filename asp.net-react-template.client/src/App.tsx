@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import './App.css';
 import { bestSector, sectorStatus, sectorLabels } from './sectorTiming';
 import { compareLaps } from './lapComparison';
+import RaceReplay from './RaceReplay';
 
 interface Driver {
     driver_number: number;
@@ -34,7 +35,7 @@ function formatLapTime(duration: number | null): string {
 }
 
 function App() {
-    const [view, setView] = useState<'laps' | 'comparison'>('laps');
+    const [view, setView] = useState<'laps' | 'comparison' | 'replay'>('laps');
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [selectedDriverNumber, setSelectedDriverNumber] = useState(3);
     const [driversLoading, setDriversLoading] = useState(true);
@@ -75,8 +76,9 @@ function App() {
                     <div className="view-switch" aria-label="Choose view">
                         <button type="button" aria-pressed={view === 'laps'} onClick={() => setView('laps')}>Driver laps</button>
                         <button type="button" aria-pressed={view === 'comparison'} onClick={() => setView('comparison')}>Compare drivers</button>
+                        <button type="button" aria-pressed={view === 'replay'} onClick={() => setView('replay')}>Race replay</button>
                     </div>
-                    {view === 'comparison' ? <DriverComparison drivers={drivers} /> : <>
+                    {view === 'replay' ? <RaceReplay drivers={drivers} /> : view === 'comparison' ? <DriverComparison drivers={drivers} /> : <>
                     <label htmlFor="driver-select">Driver: </label>
                     <select
                         id="driver-select"
