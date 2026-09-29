@@ -1,11 +1,21 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
+
+interface Driver {
+    driver_number: number;
+    full_name: string;
+    team_name: string;
+}
 
 interface Lap {
     session_key: number;
     driver_number: number;
     lap_number: number;
     lap_duration: number | null;
+    duration_sector_1: number | null;
+    duration_sector_2: number | null;
+    duration_sector_3: number | null;
+    is_pit_out_lap: boolean;
 }
 
 function formatLapTime(duration: number | null): string {
@@ -22,59 +32,127 @@ function formatLapTime(duration: number | null): string {
 }
 
 function App() {
-    const [laps, setLaps] = useState<Lap[]>([]); // updated via function setLaps
-    const [loading, setLoading] = useState(true); // loading updated via function setLoading
-    const [error, setError] = useState('');
+    const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [selectedDriverNumber, setSelectedDriverNumber] = useState(3);
+    const [driversLoading, setDriversLoading] = useState(true);
+    const [driversError, setDriversError] = useState('');
+    const selectedDriver = drivers.find(driver => driver.driver_number === selectedDriverNumber);
 
     useEffect(() => {
-        async function loadResults() {
+        const controller = new AbortController();
+
+        async function loadDrivers() {
             try {
-                const response = await fetch('/api/laps');
-
-                if (!response.ok) {
-                    throw new Error(`Request failed: ${response.status}`);
-                }
-
-                const data: Lap[] = await response.json();
-                setLaps(data);
-                // update data continuously
+                const response = await fetch('/api/drivers', { signal: controller.signal });
+                if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+                const data: Driver[] = await response.json();
+                if (!controller.signal.aborted) setDrivers(data);
             } catch {
-                setError('Could not load lap data.');
+                if (!controller.signal.aborted) setDriversError('Could not load drivers. Please refresh to retry.');
             } finally {
-                setLoading(false);
-                // confirm successful data loaded
+                if (!controller.signal.aborted) setDriversLoading(false);
             }
         }
 
-        loadResults();
+        loadDrivers();
+        return () => controller.abort();
     }, []);
 
     return (
-        <div>
-            <h1>Max Verstappen - Azerbaijan 2026 Laps</h1>
-
-            {loading ? (
-                <p>Loading...</p>
-            ) : error ? (
-                <p>{error}</p>
+        <main>
+            <h1>Azerbaijan 2026 - Lap Times</h1>
+            {driversLoading ? (
+                <p role="status">Loading drivers...</p>
+            ) : driversError ? (
+                <p role="alert">{driversError}</p>
+            ) : drivers.length === 0 ? (
+                <p>No drivers available for this race.</p>
             ) : (
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Lap</th>
-                            <th>Lap time (m:ss:ms)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {laps.map(lap => (
-                            <tr key={lap.lap_number}>
-                                <td>{lap.lap_number}</td>
-                                <td>{formatLapTime(lap.lap_duration)}</td>
-                            </tr>
+                <>
+                    <label htmlFor="driver-select">Driver: </label>
+                    <select
+                        id="driver-select"
+                        value={selectedDriverNumber}
+                        onChange={event => setSelectedDriverNumber(Number(event.target.value))}
+                    >
+                        {drivers.map(driver => (
+                            <option key={driver.driver_number} value={driver.driver_number}>
+                                {driver.driver_number} - {driver.full_name} ({driver.team_name})
+                            </option>
                         ))}
-                    </tbody>
-                </table>
+                    </select>
+                    <h2 style={{ marginTop: '1.5rem' }}>{selectedDriver?.full_name}</h2>
+                    {/* A new key resets the table's loading state when the driver changes. */}
+                    <DriverLapTable key={selectedDriverNumber} driverNumber={selectedDriverNumber} />
+                </>
             )}
+        </main>
+    );
+}
+
+function DriverLapTable({ driverNumber }: { driverNumber: number }) {
+    const [laps, setLaps] = useState<Lap[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const controller = new AbortController();
+
+        async function loadLaps() {
+            try {
+                const response = await fetch(`/api/laps?driverNumber=${driverNumber}`, {
+                    signal: controller.signal
+                });
+                if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+                const data: Lap[] = await response.json();
+                if (!controller.signal.aborted) {
+                    setLaps([...data].sort((a, b) => a.lap_number - b.lap_number));
+                }
+            } catch {
+                if (!controller.signal.aborted) {
+                    setError('Could not load lap data. Select another driver or refresh to retry.');
+                }
+            } finally {
+                if (!controller.signal.aborted) setLoading(false);
+            }
+        }
+
+        loadLaps();
+        // Cancel the previous request when this table is replaced or removed.
+        return () => controller.abort();
+    }, [driverNumber]);
+
+    if (loading) return <p role="status">Loading laps...</p>;
+    if (error) return <p role="alert">{error}</p>;
+    if (laps.length === 0) return <p>No lap data available for this driver.</p>;
+
+    return (
+        <div style={{ overflowX: 'auto' }}>
+            <table>
+                <caption>Lap and sector times (minutes:seconds:milliseconds). N/A means unavailable.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Lap</th>
+                        <th scope="col">Lap time</th>
+                        <th scope="col">Sector 1</th>
+                        <th scope="col">Sector 2</th>
+                        <th scope="col">Sector 3</th>
+                        <th scope="col">Pit-out lap</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {laps.map(lap => (
+                        <tr key={`${lap.session_key}-${lap.driver_number}-${lap.lap_number}`}>
+                            <td>{lap.lap_number}</td>
+                            <td>{formatLapTime(lap.lap_duration)}</td>
+                            <td>{formatLapTime(lap.duration_sector_1)}</td>
+                            <td>{formatLapTime(lap.duration_sector_2)}</td>
+                            <td>{formatLapTime(lap.duration_sector_3)}</td>
+                            <td>{lap.is_pit_out_lap ? 'Yes' : '—'}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }
