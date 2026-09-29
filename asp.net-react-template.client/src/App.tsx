@@ -64,7 +64,7 @@ function App() {
 
     return (
         <main>
-            <h1>Azerbaijan 2026 - Lap Times</h1>
+            <h1>Formula 1 Azerbaijan Grand Prix 2026</h1>
             {driversLoading ? (
                 <p role="status">Loading drivers...</p>
             ) : driversError ? (

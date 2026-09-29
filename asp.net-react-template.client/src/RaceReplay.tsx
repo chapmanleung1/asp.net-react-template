@@ -113,7 +113,6 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
     if (!field) return <p role="status">Loading positions for all drivers...</p>;
     const selected = [first, second];
     const colours = ['#fb7185', '#38bdf8'];
-    const focused = selected.map(driver => field.find(item => item.driverNumber === driver.driver_number));
     const markers = field.map(item => ({
         item,
         point: item.incident && elapsed >= item.incident.timeSeconds
@@ -125,6 +124,9 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
     const visibleCount = markers.filter(marker => marker.point !== null).length;
     const path = manifest.circuitPoints.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x},${y}`).join(' ') + ' Z';
     const start = manifest.circuitPoints[0];
+    const nextPoint = manifest.circuitPoints[1];
+    const startDirection = start && nextPoint ? Math.hypot(nextPoint[0] - start[0], nextPoint[1] - start[1]) : 0;
+    const startNormal = startDirection ? [-(nextPoint[1] - start[1]) / startDirection, (nextPoint[0] - start[0]) / startDirection] : [0, 1];
     const leaderboard = field.map(item => ({
         item,
         driver: drivers.find(driver => driver.driver_number === item.driverNumber),
@@ -135,22 +137,21 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
     })).sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity) || a.item.driverNumber - b.item.driverNumber);
     return (
         <>
-            <div className="replay-cards">
-                {focused.map((item, index) => item && <div key={item.driverNumber} className="replay-driver-card" style={{ borderColor: colours[index] }}>
-                    <span className="replay-dot" style={{ background: colours[index] }} />
-                    <strong>{selected[index].full_name}</strong>
-                    <span>{item.incident && elapsed >= item.incident.timeSeconds ? `Crashed at ${item.incident.location} · race lap ${item.incident.raceLap} (own lap ${lapAt(item.laps, elapsed)})` : elapsed > item.endSeconds ? `Recorded laps ended (${item.laps.length} laps)` : `Lap ${lapAt(item.laps, elapsed) ?? '—'} · ${positionAt(item.samples, elapsed) ? 'Position available' : 'Position unavailable'}`}</span>
-                </div>)}
-            </div>
-            <p className="replay-field-status">{visibleCount} of {field.length} drivers have a position at this time. Red and blue highlight your focus drivers; other drivers are shown in grey. A red × marks a recorded crash.</p>
             <div className="replay-layout">
+            <div className="replay-map-panel">
             <div className="replay-map">
                 <svg viewBox="0 0 900 560" role="img" aria-labelledby="replay-map-title replay-map-description">
                     <title id="replay-map-title">Baku City Circuit with all drivers, focused on {first.full_name} and {second.full_name}</title>
                     <desc id="replay-map-description">Circuit reconstructed from recorded positions. All available drivers have numbered markers. Red and blue highlights follow the two focused drivers.</desc>
                     <path d={path} fill="none" stroke="#334155" strokeWidth="19" strokeLinejoin="round" strokeLinecap="round" />
                     <path d={path} fill="none" stroke="#cbd5e1" strokeWidth="9" strokeLinejoin="round" strokeLinecap="round" />
-                    {start && <g><circle cx={start[0]} cy={start[1]} r="6" fill="#fff" /><text x={start[0] + 12} y={start[1] - 12} fill="#cbd5e1" fontSize="13">Start / finish</text></g>}
+                    {start && <g>
+                        <line x1={start[0] - startNormal[0] * 12} y1={start[1] - startNormal[1] * 12}
+                            x2={start[0] + startNormal[0] * 12} y2={start[1] + startNormal[1] * 12}
+                            stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+                        <text x={start[0]} y={start[1] - 23} textAnchor="middle" fill="#f8fafc" fontSize="13"
+                            paintOrder="stroke" stroke="#0f172a" strokeWidth="4">Start / finish</text>
+                    </g>}
                     {markers.map(({ item, point, focusIndex, driver }) => {
                         if (!point) return null;
                         const isFocused = focusIndex >= 0;
@@ -168,6 +169,26 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
                     })}
                 </svg>
             </div>
+            <div className="replay-controls">
+                <button type="button" onClick={() => {
+                    if (!playing && elapsed >= manifest.durationSeconds) setElapsed(0);
+                    setPlaying(!playing);
+                }}>{playing ? 'Pause' : 'Play'}</button>
+                <button type="button" onClick={() => { setPlaying(false); setElapsed(0); }}>Restart</button>
+                <Commentary elapsed={elapsed} playing={playing} speed={speed} />
+                <label htmlFor="replay-speed">Speed
+                    <select id="replay-speed" value={speed} onChange={event => setSpeed(Number(event.target.value))}>
+                        {[1, 5, 10, 25, 50].map(value => <option key={value} value={value}>{value}×</option>)}
+                    </select>
+                </label>
+                <output aria-label="Race elapsed time">{formatRaceClock(elapsed)} / {formatRaceClock(manifest.durationSeconds)}</output>
+            </div>
+            <label className="replay-timeline" htmlFor="race-timeline">Race timeline
+                <input id="race-timeline" type="range" min="0" max={manifest.durationSeconds} step="0.1" value={elapsed}
+                    aria-valuetext={formatRaceClock(elapsed)} onChange={event => { setPlaying(false); setElapsed(Number(event.target.value)); }} />
+            </label>
+            <p className="replay-field-status">{visibleCount}/{field.length} driver positions available · Red and blue mark focus drivers · × marks a crash</p>
+            </div>
             <aside className="replay-leaderboard" aria-label="Race leaderboard">
                 <h3>Race leaderboard</h3>
                 <p>Latest recorded order at {formatRaceClock(elapsed)}</p>
@@ -179,10 +200,9 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
                                 <td>{position ?? '—'}</td>
                                 <td>
                                     <button type="button" className="leaderboard-driver" aria-pressed={focusIndex >= 0}
-                                        aria-label={`Focus ${driver?.full_name ?? item.driverNumber}`} onClick={() => onFocus(item.driverNumber)}>
+                                        aria-label={`Focus ${driver?.full_name ?? item.driverNumber}, ${driver?.team_name ?? 'unknown team'}`} title={driver?.team_name} onClick={() => onFocus(item.driverNumber)}>
                                         {item.driverNumber} · {driver?.full_name ?? 'Unknown driver'}
                                     </button>
-                                    <small>{driver?.team_name}</small>
                                 </td>
                                 <td>{lap ?? '—'}{item.incident && elapsed >= item.incident.timeSeconds ? <small title={`Crashed at ${item.incident.location} on race lap ${item.incident.raceLap}`}>Crash</small> : elapsed > item.endSeconds && <small title="The driver's recorded lap data has ended">Ended</small>}</td>
                                 <td className="leaderboard-interval">{formatRaceInterval(interval, position === 1)}</td>
@@ -190,47 +210,27 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
                         ))}</tbody>
                     </table>
                 </div>
-                <p className="leaderboard-note">Int is the latest recorded gap to the car ahead. Order follows recorded position updates. “Crash” marks Bottas’s recorded Turn 15 incident on race lap 51; his own partial lap was 50. “Ended” means lap data ended and does not establish retirement or final classification.</p>
+                <p className="leaderboard-note">Int = gap to car ahead. “Crash” marks Bottas at Turn 15; “Ended” means recorded lap data ended.</p>
             </aside>
             </div>
-            <div className="replay-controls">
-                <button type="button" onClick={() => {
-                    if (!playing && elapsed >= manifest.durationSeconds) setElapsed(0);
-                    setPlaying(!playing);
-                }}>{playing ? 'Pause' : 'Play'}</button>
-                <button type="button" onClick={() => { setPlaying(false); setElapsed(0); }}>Restart</button>
-                <label htmlFor="replay-speed">Speed
-                    <select id="replay-speed" value={speed} onChange={event => setSpeed(Number(event.target.value))}>
-                        {[1, 5, 10, 25, 50].map(value => <option key={value} value={value}>{value}×</option>)}
-                    </select>
-                </label>
-                <output aria-label="Race elapsed time">{formatRaceClock(elapsed)} / {formatRaceClock(manifest.durationSeconds)}</output>
-            </div>
-            <Commentary elapsed={elapsed} playing={playing} speed={speed} onChoose={() => { setPlaying(false); setSpeed(1); }} />
-            <label className="replay-timeline" htmlFor="race-timeline">Race timeline
-                <input id="race-timeline" type="range" min="0" max={manifest.durationSeconds} step="0.1" value={elapsed}
-                    aria-valuetext={formatRaceClock(elapsed)} onChange={event => { setPlaying(false); setElapsed(Number(event.target.value)); }} />
-            </label>
         </>
     );
 }
 
-function Commentary({ elapsed, playing, speed, onChoose }: { elapsed: number; playing: boolean; speed: number; onChoose: () => void }) {
+const DRIVE_COMMENTARY_URL = '/api/replay/commentary';
+
+function Commentary({ elapsed, playing, speed }: { elapsed: number; playing: boolean; speed: number }) {
     const audioRef = useRef<HTMLAudioElement>(null);
-    const [source, setSource] = useState('');
-    const [filename, setFilename] = useState('');
     const [volume, setVolume] = useState(0.7);
-    const [offset, setOffset] = useState(533);
     const [message, setMessage] = useState('');
     const [ready, setReady] = useState(false);
-    useEffect(() => () => { if (source) URL.revokeObjectURL(source); }, [source]);
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio || !ready) return;
         audio.volume = volume;
-        const target = Math.min(elapsed + offset, Number.isFinite(audio.duration) ? audio.duration : elapsed + offset);
+        const target = Math.min(elapsed + 533, Number.isFinite(audio.duration) ? audio.duration : elapsed + 533);
         if (!playing || Math.abs(audio.currentTime - target) > 0.5) audio.currentTime = target;
-    }, [elapsed, offset, volume, playing, ready]);
+    }, [elapsed, volume, playing, ready]);
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio || !ready) return;
@@ -239,26 +239,14 @@ function Commentary({ elapsed, playing, speed, onChoose }: { elapsed: number; pl
             audio.play().catch(() => { if (!cancelled) setMessage('Audio could not play. Pause and press Play to retry.'); });
         } else audio.pause();
         return () => { cancelled = true; audio.pause(); };
-    }, [playing, speed, source, ready]);
-    return <section className="commentary-controls" aria-label="Race commentary">
-        <label className="commentary-picker">Choose commentary
-            <input type="file" accept="audio/*,.mp3" onChange={event => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                onChoose(); setReady(false); setMessage('');
-                setFilename(file.name); setSource(URL.createObjectURL(file));
-            }} />
-        </label>
-        <p>{filename || 'Choose a local audio file. It stays on your device and is not uploaded.'}</p>
-        <div className="commentary-options">
-            <label>Volume <input type="range" min="0" max="1" step="0.01" value={volume} aria-label="Commentary volume"
-                onChange={event => setVolume(Number(event.target.value))} /> <output>{Math.round(volume * 100)}%</output></label>
-            <label>Audio start offset (seconds) <input type="number" min="0" step="0.1" value={offset}
-                onChange={event => setOffset(Math.max(0, Number(event.target.value)))} /></label>
-        </div>
-        <p>Starts at 8:53 by default. Adjust the offset to align lights out with the replay. Commentary plays at 1×; faster replay speeds pause the audio.</p>
-        {source && <audio ref={audioRef} src={source} preload="auto" onLoadedMetadata={() => setReady(true)}
-            onError={() => setMessage('This audio file could not be loaded. Try an MP3 file.')} />}
-        {message && <p role="alert">{message}</p>}
-    </section>;
+    }, [playing, speed, ready]);
+    return <div className="commentary-volume">
+        <label htmlFor="commentary-volume">Commentary volume</label>
+        <input id="commentary-volume" type="range" min="0" max="1" step="0.01" value={volume}
+            onChange={event => setVolume(Number(event.target.value))} />
+        <output>{Math.round(volume * 100)}%</output>
+        <audio ref={audioRef} src={DRIVE_COMMENTARY_URL} preload="metadata" onLoadedMetadata={() => setReady(true)}
+            onError={() => setMessage('Commentary could not load. Check the local MP3 in Downloads or the Google Drive link.')} />
+        {message && <span role="alert" className="commentary-error">{message}</span>}
+    </div>;
 }
