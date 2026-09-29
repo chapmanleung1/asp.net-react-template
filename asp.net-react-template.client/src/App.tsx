@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import './App.css';
 import { bestSector, sectorStatus, sectorLabels } from './sectorTiming';
+import { compareLaps } from './lapComparison';
 
 interface Driver {
     driver_number: number;
@@ -33,6 +34,7 @@ function formatLapTime(duration: number | null): string {
 }
 
 function App() {
+    const [view, setView] = useState<'laps' | 'comparison'>('laps');
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [selectedDriverNumber, setSelectedDriverNumber] = useState(3);
     const [driversLoading, setDriversLoading] = useState(true);
@@ -70,6 +72,11 @@ function App() {
                 <p>No drivers available for this race.</p>
             ) : (
                 <>
+                    <div className="view-switch" aria-label="Choose view">
+                        <button type="button" aria-pressed={view === 'laps'} onClick={() => setView('laps')}>Driver laps</button>
+                        <button type="button" aria-pressed={view === 'comparison'} onClick={() => setView('comparison')}>Compare drivers</button>
+                    </div>
+                    {view === 'comparison' ? <DriverComparison drivers={drivers} /> : <>
                     <label htmlFor="driver-select">Driver: </label>
                     <select
                         id="driver-select"
@@ -85,6 +92,7 @@ function App() {
                     <h2 style={{ marginTop: '1.5rem' }}>{selectedDriver?.full_name}</h2>
                     {/* A new key resets the table's loading state when the driver changes. */}
                     <DriverLapTable key={selectedDriverNumber} driverNumber={selectedDriverNumber} />
+                    </>}
                 </>
             )}
         </main>
@@ -177,6 +185,94 @@ function DriverLapTable({ driverNumber }: { driverNumber: number }) {
                 </tbody>
             </table>
         </div>
+    );
+}
+
+function DriverComparison({ drivers }: { drivers: Driver[] }) {
+    const [firstNumber, setFirstNumber] = useState(3);
+    const [secondNumber, setSecondNumber] = useState(63);
+    const [laps, setLaps] = useState<Lap[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const firstDriver = drivers.find(driver => driver.driver_number === firstNumber);
+    const secondDriver = drivers.find(driver => driver.driver_number === secondNumber);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        async function loadComparison() {
+            try {
+                const response = await fetch('/api/laps', { signal: controller.signal });
+                if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+                const data: Lap[] = await response.json();
+                if (!controller.signal.aborted) setLaps(data);
+            } catch {
+                if (!controller.signal.aborted) setError('Could not load comparison data. Please refresh to retry.');
+            } finally {
+                if (!controller.signal.aborted) setLoading(false);
+            }
+        }
+        loadComparison();
+        return () => controller.abort();
+    }, []);
+
+    const rows = compareLaps(laps, firstNumber, secondNumber);
+    const firstBest = bestSector(laps.filter(lap => lap.driver_number === firstNumber).map(lap => lap.lap_duration));
+    const secondBest = bestSector(laps.filter(lap => lap.driver_number === secondNumber).map(lap => lap.lap_duration));
+
+    return (
+        <section aria-label="Two-driver comparison">
+            <div className="comparison-controls">
+                <label htmlFor="first-driver">First driver
+                    <select id="first-driver" value={firstNumber} onChange={event => setFirstNumber(Number(event.target.value))}>
+                        {drivers.filter(driver => driver.driver_number !== secondNumber).map(driver => (
+                            <option key={driver.driver_number} value={driver.driver_number}>{driver.full_name} ({driver.team_name})</option>
+                        ))}
+                    </select>
+                </label>
+                <label htmlFor="second-driver">Second driver
+                    <select id="second-driver" value={secondNumber} onChange={event => setSecondNumber(Number(event.target.value))}>
+                        {drivers.filter(driver => driver.driver_number !== firstNumber).map(driver => (
+                            <option key={driver.driver_number} value={driver.driver_number}>{driver.full_name} ({driver.team_name})</option>
+                        ))}
+                    </select>
+                </label>
+            </div>
+            <h2>{firstDriver?.full_name} vs {secondDriver?.full_name}</h2>
+            {loading ? <p role="status">Loading comparison...</p> : error ? <p role="alert">{error}</p> : rows.length === 0 ? <p>No laps available for these drivers.</p> : <>
+                <div className="comparison-summary">
+                    <p>{firstDriver?.full_name}<br /><strong>Best recorded lap: {formatLapTime(firstBest === null ? null : firstBest / 1000)}</strong></p>
+                    <p>{secondDriver?.full_name}<br /><strong>Best recorded lap: {formatLapTime(secondBest === null ? null : secondBest / 1000)}</strong></p>
+                </div>
+                <p className="sector-note">Matching lap numbers. Difference = first driver’s lap time minus second driver’s. Negative means the first driver was faster. This is a lap-time difference, not the gap between cars on track. Pit-out laps are marked; pit-in and safety-car laps remain included.</p>
+                <div className="comparison-table-wrapper">
+                    <table>
+                        <caption>Recorded lap times; missing times show N/A. Faster laps are highlighted.</caption>
+                        <thead><tr>
+                            <th scope="col">Lap</th>
+                            <th scope="col">{firstDriver?.full_name}</th>
+                            <th scope="col">{secondDriver?.full_name}</th>
+                            <th scope="col">Difference (s)</th>
+                            <th scope="col">Faster driver</th>
+                        </tr></thead>
+                        <tbody>{rows.map(row => (
+                            <tr key={row.lapNumber}>
+                                <td>{row.lapNumber}</td>
+                                <td className={row.difference !== null && row.difference < 0 ? 'comparison-faster' : undefined}>
+                                    {formatLapTime(row.firstLap?.lap_duration ?? null)}
+                                    {row.firstLap?.is_pit_out_lap && <small className="pit-marker">Pit out</small>}
+                                </td>
+                                <td className={row.difference !== null && row.difference > 0 ? 'comparison-faster' : undefined}>
+                                    {formatLapTime(row.secondLap?.lap_duration ?? null)}
+                                    {row.secondLap?.is_pit_out_lap && <small className="pit-marker">Pit out</small>}
+                                </td>
+                                <td>{row.difference === null ? 'N/A' : `${row.difference > 0 ? '+' : ''}${(row.difference / 1000).toFixed(3)}`}</td>
+                                <td>{row.difference === null ? 'N/A' : row.difference === 0 ? 'Equal' : row.difference < 0 ? firstDriver?.full_name : secondDriver?.full_name}</td>
+                            </tr>
+                        ))}</tbody>
+                    </table>
+                </div>
+            </>}
+        </section>
     );
 }
 

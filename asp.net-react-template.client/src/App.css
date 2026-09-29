@@ -43,3 +43,32 @@ table {
     font-size: 0.85rem;
     margin-bottom: 1rem;
 }
+
+
+.view-switch, .comparison-controls, .comparison-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+.view-switch button {
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    background: var(--bg);
+    color: var(--text-h);
+    cursor: pointer;
+    font: inherit;
+}
+.view-switch button[aria-pressed="true"] {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+.comparison-controls label { display: flex; flex-direction: column; gap: 0.4rem; }
+.comparison-controls select { max-width: 100%; padding: 0.5rem; font: inherit; }
+.comparison-summary p { padding: 1rem; border: 1px solid var(--border); border-radius: 0.5rem; }
+.comparison-table-wrapper { overflow-x: auto; }
+.comparison-faster { background: #166534; color: #fff; }
+.pit-marker { display: block; font-size: 0.7rem; }
+.comparison-table-wrapper td { padding-top: 0.4rem; padding-bottom: 0.4rem; font-variant-numeric: tabular-nums; }
