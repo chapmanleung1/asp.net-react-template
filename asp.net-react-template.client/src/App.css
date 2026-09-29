@@ -1,5 +1,5 @@
 ﻿#root {
-    max-width: 1280px;
+    max-width: 1800px;
     margin: 0 auto;
     padding: 2rem;
     text-align: center;
@@ -98,8 +98,8 @@ table {
 .replay-marker:not(.focused) { opacity: 0.8; }
 
 
-.replay-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; align-items: start; gap: 1rem; margin: 1.25rem auto; }
-.replay-layout .replay-map { margin: 0; width: 100%; }
+.replay-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 30%); align-items: start; gap: 1rem; margin: 1.25rem auto; }
+.replay-layout .replay-map { margin: 0; width: 100%; max-width: none; }
 .replay-leaderboard { border: 1px solid var(--border); border-radius: 0.75rem; overflow: hidden; text-align: left; background: var(--bg); }
 .replay-leaderboard h3 { margin: 0.8rem 0.8rem 0.3rem; font-size: 1rem; color: var(--text-h); }
 .replay-leaderboard > p { margin: 0.4rem 0.8rem 0.7rem; font-size: 0.7rem; line-height: 1.4; }
@@ -138,7 +138,7 @@ table {
 .replay-leaderboard small { margin-top: 0.1rem; line-height: 1.15; }
 @media (min-width: 901px) {
     .replay-layout { position: relative; }
-    .replay-leaderboard { position: absolute; right: 0; top: 0; bottom: 0; width: 290px; box-sizing: border-box; }
+    .replay-leaderboard { position: absolute; right: 0; top: 0; bottom: 0; width: 30%; min-width: 380px; box-sizing: border-box; }
 }
 @media (max-width: 900px) {
     .replay-leaderboard { max-height: 460px; }

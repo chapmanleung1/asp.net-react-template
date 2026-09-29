@@ -17,6 +17,7 @@ interface DriverReplay {
     endSeconds: number;
     samples: ReplaySample[];
     laps: ReplayLap[];
+    incident?: { timeSeconds: number; kind: 'crash'; raceLap: number; location: string };
 }
 
 export default function RaceReplay({ drivers }: { drivers: Driver[] }) {
@@ -115,7 +116,9 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
     const focused = selected.map(driver => field.find(item => item.driverNumber === driver.driver_number));
     const markers = field.map(item => ({
         item,
-        point: positionAt(item.samples, elapsed),
+        point: item.incident && elapsed >= item.incident.timeSeconds
+            ? { x: item.samples[item.samples.length - 1][1], y: item.samples[item.samples.length - 1][2] }
+            : positionAt(item.samples, elapsed),
         focusIndex: selected.findIndex(driver => driver.driver_number === item.driverNumber),
         driver: drivers.find(driver => driver.driver_number === item.driverNumber)
     })).sort((a, b) => a.focusIndex - b.focusIndex);
@@ -136,10 +139,10 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
                 {focused.map((item, index) => item && <div key={item.driverNumber} className="replay-driver-card" style={{ borderColor: colours[index] }}>
                     <span className="replay-dot" style={{ background: colours[index] }} />
                     <strong>{selected[index].full_name}</strong>
-                    <span>{elapsed > item.endSeconds ? `Recorded laps ended (${item.laps.length} laps)` : `Lap ${lapAt(item.laps, elapsed) ?? '—'} · ${positionAt(item.samples, elapsed) ? 'Position available' : 'Position unavailable'}`}</span>
+                    <span>{item.incident && elapsed >= item.incident.timeSeconds ? `Crashed at ${item.incident.location} · race lap ${item.incident.raceLap} (own lap ${lapAt(item.laps, elapsed)})` : elapsed > item.endSeconds ? `Recorded laps ended (${item.laps.length} laps)` : `Lap ${lapAt(item.laps, elapsed) ?? '—'} · ${positionAt(item.samples, elapsed) ? 'Position available' : 'Position unavailable'}`}</span>
                 </div>)}
             </div>
-            <p className="replay-field-status">{visibleCount} of {field.length} drivers have a position at this time. Red and blue highlight your focus drivers; other drivers are shown in grey.</p>
+            <p className="replay-field-status">{visibleCount} of {field.length} drivers have a position at this time. Red and blue highlight your focus drivers; other drivers are shown in grey. A red × marks a recorded crash.</p>
             <div className="replay-layout">
             <div className="replay-map">
                 <svg viewBox="0 0 900 560" role="img" aria-labelledby="replay-map-title replay-map-description">
@@ -151,14 +154,15 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
                     {markers.map(({ item, point, focusIndex, driver }) => {
                         if (!point) return null;
                         const isFocused = focusIndex >= 0;
-                        const colour = isFocused ? colours[focusIndex] : '#94a3b8';
+                        const crashed = !!item.incident && elapsed >= item.incident.timeSeconds;
+                        const colour = crashed ? '#ef4444' : isFocused ? colours[focusIndex] : '#94a3b8';
                         return (
                             <g key={item.driverNumber} className={isFocused ? 'replay-marker focused' : 'replay-marker'}
                                 transform={`translate(${point.x}, ${point.y})`}>
                                 {isFocused && <circle r="18" fill={colour} fillOpacity="0.25" />}
                                 <circle r={isFocused ? 12 : 8} fill={colour} stroke={isFocused ? '#fff' : '#0f172a'} strokeWidth={isFocused ? 2 : 1} />
-                                <text textAnchor="middle" dominantBaseline="central" fill="#0f172a" fontSize={isFocused ? 10 : 7} fontWeight="800">{item.driverNumber}</text>
-                                <title>{driver?.full_name ?? `Driver ${item.driverNumber}`}{isFocused ? ' — focused' : ''}</title>
+                                <text textAnchor="middle" dominantBaseline="central" fill="#0f172a" fontSize={isFocused ? 10 : 7} fontWeight="800">{crashed ? '×' : item.driverNumber}</text>
+                                <title>{driver?.full_name ?? `Driver ${item.driverNumber}`}{crashed ? ` — crashed at ${item.incident?.location} on race lap ${item.incident?.raceLap}` : isFocused ? ' — focused' : ''}</title>
                             </g>
                         );
                     })}
@@ -180,13 +184,13 @@ function ReplayPlayer({ first, second, drivers, manifest, onFocus }: { first: Dr
                                     </button>
                                     <small>{driver?.team_name}</small>
                                 </td>
-                                <td>{lap ?? '—'}{elapsed > item.endSeconds && <small title="The driver's recorded lap data has ended">Ended</small>}</td>
+                                <td>{lap ?? '—'}{item.incident && elapsed >= item.incident.timeSeconds ? <small title={`Crashed at ${item.incident.location} on race lap ${item.incident.raceLap}`}>Crash</small> : elapsed > item.endSeconds && <small title="The driver's recorded lap data has ended">Ended</small>}</td>
                                 <td className="leaderboard-interval">{formatRaceInterval(interval, position === 1)}</td>
                             </tr>
                         ))}</tbody>
                     </table>
                 </div>
-                <p className="leaderboard-note">Int is the latest recorded gap to the car ahead. Order follows recorded position updates. “Ended” means lap data ended; it does not establish retirement or final classification.</p>
+                <p className="leaderboard-note">Int is the latest recorded gap to the car ahead. Order follows recorded position updates. “Crash” marks Bottas’s recorded Turn 15 incident on race lap 51; his own partial lap was 50. “Ended” means lap data ended and does not establish retirement or final classification.</p>
             </aside>
             </div>
             <div className="replay-controls">
