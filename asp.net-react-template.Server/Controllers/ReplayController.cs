@@ -40,7 +40,7 @@ public class ReplayController : ControllerBase
     {
         if (_environment.IsDevelopment())
         {
-            var localPath = Environment.GetEnvironmentVariable("COMMENTARY_MP3_PATH")
+            var localPath = Environment.GetEnvironmentVariable("COMMENTARY_MP3_PATH") // EDIT THE LOCAL PATH HERE
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", CommentaryFileName);
             if (System.IO.File.Exists(localPath))
                 return PhysicalFile(localPath, "audio/mpeg", enableRangeProcessing: true);
