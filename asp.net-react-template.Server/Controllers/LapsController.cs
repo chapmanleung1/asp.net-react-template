@@ -15,18 +15,30 @@ public class LapsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<Lap>>> Get()
+    public async Task<ActionResult<List<Lap>>> Get([FromQuery] int? driverNumber, CancellationToken cancellationToken)
     {
         var filePath = Path.Combine(
             _environment.ContentRootPath,
             "data",
-            "azerbaijan-2026-max-laps.json"
+            "azerbaijan-2026-laps.json"
         );
 
-        var json = await System.IO.File.ReadAllTextAsync(filePath);
+        if (driverNumber.HasValue && driverNumber.Value <= 0)
+        {
+            return BadRequest("Driver number must be positive.");
+        }
 
-        var laps = JsonSerializer.Deserialize<List<Lap>>(json);
+        var json = await System.IO.File.ReadAllTextAsync(filePath, cancellationToken);
 
-        return Ok(laps);
+        var laps = JsonSerializer.Deserialize<List<Lap>>(json) ?? new List<Lap>();
+
+        // Without a driver number, return laps for every driver in this race.
+        var selectedLaps = laps.Where(lap =>
+            !driverNumber.HasValue || lap.DriverNumber == driverNumber.Value);
+
+        return Ok(selectedLaps
+            .OrderBy(lap => lap.DriverNumber)
+            .ThenBy(lap => lap.LapNumber)
+            .ToList());
     }
 }
