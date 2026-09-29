@@ -15,4 +15,16 @@ public class Lap
 
     [JsonPropertyName("lap_duration")]
     public double? LapDuration { get; set; }
+
+    [JsonPropertyName("duration_sector_1")]
+    public double? DurationSector1 { get; set; }
+
+    [JsonPropertyName("duration_sector_2")]
+    public double? DurationSector2 { get; set; }
+
+    [JsonPropertyName("duration_sector_3")]
+    public double? DurationSector3 { get; set; }
+
+    [JsonPropertyName("is_pit_out_lap")]
+    public bool IsPitOutLap { get; set; }
 }
