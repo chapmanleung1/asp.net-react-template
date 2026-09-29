@@ -10,3 +10,5 @@ The SVG circuit outline is a trace of Verstappen's third recorded lap. It is an 
 manifest.json contains the shared clock and map; NUMBER.json contains one driver's positions and lap timeline. JSON tuple fields are documented in src/replayMath.ts in the client.
 
 Race order source: https://api.openf1.org/v1/position?session_key=11377 . Each driver's latest pre-start order is retained at time zero, followed by position changes up to the end of the replay. The leaderboard uses the latest recorded position at or before the shared clock time; it does not infer order from map coordinates or imply final classification. Position-history tuples are [elapsed seconds, recorded position].
+
+Leaderboard intervals come from OpenF1 `/v1/intervals?session_key=11377`, stored in `manifest.json` as per-driver time histories. Each displayed interval is the latest recorded gap to the car ahead at the replay time; updates are discrete, not interpolated.

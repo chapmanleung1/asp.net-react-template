@@ -49,3 +49,22 @@ export function racePositionAt(history: RacePosition[], elapsed: number): number
     }
     return low === 0 ? null : history[low - 1][1];
 }
+
+export type RaceInterval = [number, number | string | null]; // elapsed seconds, gap to car ahead
+
+export function raceIntervalAt(history: RaceInterval[], elapsed: number): number | string | null {
+    let low = 0;
+    let high = history.length;
+    while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (history[mid][0] <= elapsed) low = mid + 1;
+        else high = mid;
+    }
+    return low === 0 ? null : history[low - 1][1];
+}
+
+export function formatRaceInterval(value: number | string | null, isLeader: boolean): string {
+    if (isLeader || value === null) return '—';
+    if (typeof value === 'string') return value;
+    return `+${value.toFixed(3)}`;
+}
